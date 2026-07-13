@@ -7,7 +7,8 @@
 const SENTINEL_URL = process.env.SENTINEL_API_URL;
 const SENTINEL_KEY = process.env.SENTINEL_API_KEY;
 const SHADOW_MODE = process.env.SENTINEL_SHADOW_MODE === "true";
-const TIMEOUT_MS = 3000;
+const TIMEOUT_MS = 8000; // 8s — generous for Render/Railway cold-start response times
+
 
 // ── Startup diagnostics ────────────────────────────────────────────────────
 // Logged once at module load so you can immediately see at boot whether
