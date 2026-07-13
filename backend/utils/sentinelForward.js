@@ -9,6 +9,16 @@ const SENTINEL_KEY = process.env.SENTINEL_API_KEY;
 const SHADOW_MODE = process.env.SENTINEL_SHADOW_MODE === "true";
 const TIMEOUT_MS = 3000;
 
+// ── Startup diagnostics ────────────────────────────────────────────────────
+// Logged once at module load so you can immediately see at boot whether
+// the Sentinel integration is correctly configured, without needing to
+// trigger a request first.
+console.log("[Sentinel] Config check:", {
+  url: SENTINEL_URL || "⚠️  SENTINEL_API_URL not set — all events will fail open",
+  keyPresent: !!SENTINEL_KEY || "⚠️  SENTINEL_API_KEY not set — all events will fail open",
+  shadowMode: SHADOW_MODE,
+});
+
 /**
  * Returned whenever Sentinel is unreachable, times out, or returns a
  * non-200. Sentinel being down must never block legitimate users.
@@ -36,6 +46,14 @@ export async function forwardToSentinel(payload) {
     return FAIL_OPEN;
   }
 
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[Sentinel Proxy] → forwarding event", {
+      url: SENTINEL_URL,
+      action: payload.action?.type,
+      user: payload.user_id ? String(payload.user_id).slice(0, 8) + "..." : null,
+    });
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -51,12 +69,26 @@ export async function forwardToSentinel(payload) {
     });
 
     if (!upstream.ok) {
-      console.warn(`[Sentinel Proxy] upstream returned ${upstream.status} — failing open`);
+      const errBody = await upstream.text().catch(() => "");
+      console.warn(`[Sentinel Proxy] upstream returned ${upstream.status} — failing open`, {
+        url: SENTINEL_URL,
+        status: upstream.status,
+        body: errBody.slice(0, 300),
+      });
       return FAIL_OPEN;
     }
 
     const body = await upstream.json().catch(() => null);
     const result = body && typeof body === "object" ? body : FAIL_OPEN;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[Sentinel Proxy] ← received verdict", {
+        action: payload.action?.type,
+        recommended_action: result.recommended_action,
+        risk_score: result.risk?.score,
+        degraded: result.degraded ?? false,
+      });
+    }
 
     if (SHADOW_MODE && result.recommended_action && result.recommended_action !== "ALLOW") {
       return { ...result, recommended_action: "ALLOW", shadow_verdict: result.recommended_action };

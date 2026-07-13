@@ -1,15 +1,16 @@
 import emailjs from "@emailjs/nodejs";
 import userModel from "../models/userModel.js";
 import otpModel from "../models/otpModel.js";
+import crypto from "crypto";
 
 /**
  * EmailJS settings are read from server-side environment variables.
  * For Gmail: enable 2FA → Google Account → Security → App Passwords → generate one.
  * Configure the email layout and recipient in the EmailJS dashboard template.
  */
-/** Generates a cryptographically sufficient 6-digit numeric OTP */
+/** Generates a cryptographically secure 6-digit numeric OTP */
 const generateOtp = () =>
-  String(Math.floor(100000 + Math.random() * 900000));
+  String(crypto.randomInt(100000, 1000000));
 
 /**
  * POST /api/user/send-otp
@@ -26,7 +27,7 @@ const sendOtp = async (req, res) => {
     // Look up the user's registered email (source of truth is the DB)
     const user = await userModel.findById(userId).select("email name");
     if (!user) {
-      return res.json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     const code = generateOtp();
@@ -54,8 +55,8 @@ const sendOtp = async (req, res) => {
 
     res.json({ success: true, message: "Verification code sent to your registered email" });
   } catch (error) {
-    console.error("[OTP] sendOtp error:", error);
-    res.json({
+    console.error("[OTP] sendOtp error:", error.message);
+    res.status(500).json({
       success: false,
       message: "Failed to send verification code. Please try again.",
     });
@@ -98,8 +99,8 @@ const verifyOtp = async (req, res) => {
 
     res.json({ success: true, message: "Identity verified successfully" });
   } catch (error) {
-    console.error("[OTP] verifyOtp error:", error);
-    res.json({ success: false, message: error.message });
+    console.error("[OTP] verifyOtp error:", error.message);
+    res.status(500).json({ success: false, message: "Verification failed. Please try again." });
   }
 };
 

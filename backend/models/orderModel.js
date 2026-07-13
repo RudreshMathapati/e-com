@@ -9,7 +9,11 @@ const orderSchema = new mongoose.Schema({
   paymentMethod: { type: String, required: true },
   payment: { type: Boolean, required: true, default: false },
   date: { type: Number, required: true },
+  // Stored at checkout creation so verifyStripe can confirm payment
+  // server-side with the Stripe API rather than trusting req.body.success.
+  stripeSessionId: { type: String, default: null },
 });
+
 
 const orderModel =
   mongoose.models.order || mongoose.model("order", orderSchema);

@@ -6,17 +6,27 @@ import ShopContextProvider from "./context/ShopContext.jsx";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { initSentinel, sentinelTrack } from "./sentinel.js";
+import { setupLogger } from "./logger.js";
 
-// Initialize the Sentinel SDK early at app boot. The endpoint MUST be
-// absolute (not a relative "/api/sentinel-proxy") — frontend and backend
-// are separate Vercel deployments with no API rewrite between them, so a
-// relative path would resolve against this app's own domain in production
-// and silently 404 (the SDK would fail open, but Sentinel would never see
-// any traffic). `credentials: 'include'` on the SDK's fetch is why the
-// backend cookie is issued with SameSite=None; Secure in production —
-// see backend/controllers/userController.js.
-const backendUrl = import.meta.env.VITE_BACKEND_URL;
-initSentinel({ endpoint: `${backendUrl}/api/sentinel-proxy` });
+// Set up request/response/error logging before anything else
+setupLogger();
+
+// Initialize the Sentinel SDK early at app boot.
+//
+// The endpoint is intentionally a RELATIVE path ("/api/sentinel-proxy"), not
+// an absolute URL. In development, Vite's proxy (vite.config.js) forwards
+// this to http://localhost:4000/api/sentinel-proxy — keeping the request
+// same-origin so the httpOnly sentinel_user_token cookie is sent (SameSite=lax
+// only allows cookies on same-origin or top-level navigation, not cross-origin
+// fetches). In production (Vercel), the frontend and backend are separate
+// deployments — set the VITE_SENTINEL_PROXY_URL env var in the Vercel frontend
+// dashboard to point at your deployed backend, e.g.:
+//   VITE_SENTINEL_PROXY_URL=https://your-backend.railway.app/api/sentinel-proxy
+// If unset, falls back to the relative path (only works if frontend and backend
+// share the same domain/origin in production).
+const sentinelEndpoint =
+  import.meta.env.VITE_SENTINEL_PROXY_URL || "/api/sentinel-proxy";
+initSentinel({ endpoint: sentinelEndpoint });
 
 // Global Axios Interceptor to track every state-changing action (POST/PUT/DELETE)
 axios.interceptors.request.use(async (config) => {
