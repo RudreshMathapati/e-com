@@ -11,6 +11,17 @@ import { setupLogger } from "./logger.js";
 // Set up request/response/error logging before anything else
 setupLogger();
 
+// Required for cross-origin cookie flow (Vercel frontend → Render backend):
+// The browser only stores a Set-Cookie from a cross-origin response when the
+// originating request was made with credentials. Without this, the backend's
+// `Set-Cookie: sentinel_user_token` on login is silently discarded, the cookie
+// is never in the browser jar, and the Sentinel SDK's `credentials:'include'`
+// finds nothing to send → 401 on every proxy call.
+// The backend CORS config (config/cors.js) already has `credentials: true` and
+// explicit allowed origins, so this is safe.
+axios.defaults.withCredentials = true;
+
+
 // Initialize the Sentinel SDK early at app boot.
 //
 // The endpoint is intentionally a RELATIVE path ("/api/sentinel-proxy"), not
