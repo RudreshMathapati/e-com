@@ -1,0 +1,59 @@
+{
+  "name": "@sentinel-dev/sdk",
+  "version": "0.1.0",
+  "description": "Sentinel behavioral security SDK — browser-side client for the Sentinel post-login session monitoring API. Zero runtime dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "./src/browser/index.js",
+    "./dist/sentinel.min.js",
+    "./dist/sentinel.umd.js"
+  ],
+  "main": "./dist/sentinel.cjs",
+  "module": "./dist/sentinel.esm.js",
+  "browser": "./dist/sentinel.umd.js",
+  "types": "./dist/types/index.d.ts",
+  "unpkg": "./dist/sentinel.min.js",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "browser": "./dist/sentinel.umd.js",
+      "import": "./dist/sentinel.esm.js",
+      "require": "./dist/sentinel.cjs",
+      "default": "./dist/sentinel.esm.js"
+    },
+    "./browser": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/sentinel.min.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "build": "rollup -c && npm run size",
+    "size": "node scripts/check-size.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@rollup/plugin-terser": "^0.4.4",
+    "jsdom": "^25.0.1",
+    "rollup": "^4.24.0",
+    "rollup-plugin-dts": "^6.1.1",
+    "vitest": "^2.1.4"
+  },
+  "keywords": [
+    "security",
+    "fraud",
+    "session-monitoring",
+    "behavioral-analytics",
+    "sdk"
+  ]
+}

@@ -9,7 +9,7 @@ const authUser = async (req, res, next) => {
   const token = req.headers.token || req.cookies?.sentinel_user_token;
 
   if (!token) {
-    return res.json({ success: false, message: "Not Authorized Login Again" });
+    return res.status(401).json({ success: false, message: "Not Authorized Login Again" });
   }
 
   if (await isBlacklisted(token)) {
@@ -22,8 +22,8 @@ const authUser = async (req, res, next) => {
     req.sentinelSessionId = token; // resolved header-or-cookie token, for the proxy routes
     next();
   } catch (error) {
-    console.log(error);
-    res.json({ success: false, message: error.message });
+    console.error("[Auth] JWT error:", error.message);
+    res.status(401).json({ success: false, message: error.message });
   }
 };
 

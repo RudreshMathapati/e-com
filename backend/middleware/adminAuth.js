@@ -7,7 +7,7 @@ const adminAuth = async (req, res, next) => {
     // Sentinel SDK's cookie-only browser transport reach the admin proxy.
     const token = req.headers.token || req.cookies?.sentinel_admin_token;
     if (!token) {
-      return res.json({
+      return res.status(401).json({
         success: false,
         message: "Not Authorized Login Again",
       });
@@ -18,17 +18,18 @@ const adminAuth = async (req, res, next) => {
     }
 
     const token_decode = jwt.verify(token, process.env.JWT_SECRET);
-    if (token_decode !== process.env.ADMIN_EMAIL + process.env.ADMIN_PASSWORD) {
-      return res.json({
+    // Admin token payload is { role: 'admin', email } — reject anything else.
+    if (token_decode.role !== "admin" || token_decode.email !== process.env.ADMIN_EMAIL) {
+      return res.status(401).json({
         success: false,
         message: "Not Authorized Login Again",
       });
     }
-    req.sentinelSessionId = token; // resolved header-or-cookie token, for the admin proxy route
+    req.sentinelSessionId = token;
     next();
   } catch (error) {
-    console.log(error);
-    res.json({ success: false, message: error.message });
+    console.error("[AdminAuth] error:", error.message);
+    res.status(401).json({ success: false, message: error.message });
   }
 };
 

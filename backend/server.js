@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import "dotenv/config";
 import connectDB from "./config/mongodb.js";
 import connectCloudinary from "./config/cloudinary.js";
@@ -14,9 +15,28 @@ import adminSentinelProxy from "./routes/adminSentinelProxy.js";
 import sentinelWebhookRoute from "./routes/sentinelWebhookRoute.js";
 import otpRouter from "./routes/otpRoute.js";
 
+// ── Startup env validation ────────────────────────────────────────────────
+// Fail fast on missing critical vars rather than silently misbehaving at
+// request time. Only checked in the server.js entry point (local dev);
+// api/index.js carries the same check for Vercel.
+const REQUIRED_ENV = ["MONGO_URI", "JWT_SECRET"];
+const missing = REQUIRED_ENV.filter((v) => !process.env[v]);
+if (missing.length > 0) {
+  console.error(`[Startup] Missing required environment variables: ${missing.join(", ")}`);
+  process.exit(1);
+}
+if (!process.env.SENTINEL_API_KEY) {
+  console.warn("[Startup] SENTINEL_API_KEY not set — Sentinel events will fail open (no data in dashboard)");
+}
+if (!process.env.SENTINEL_API_URL) {
+  console.warn("[Startup] SENTINEL_API_URL not set — Sentinel events will fail open (no data in dashboard)");
+}
+
 // App Config
 const app = express();
 const port = process.env.PORT || 4000;
+
+// Connect services
 connectDB();
 connectCloudinary();
 
@@ -26,35 +46,49 @@ connectCloudinary();
 // breaks resolveRealClientIp()'s final fallback (utils/sentinelForward.js).
 app.set("trust proxy", 1);
 
-// middlewares
-app.use(express.json());
+// Security headers — applied before any route handler.
+// contentSecurityPolicy is disabled here because the API serves only JSON;
+// the frontend CSP is handled at Vercel edge headers.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// Middlewares
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 app.use(cors(corsOptions));
 
-// Sentinel async webhook — signature-verified, no auth middleware needed
+// Routes
+// Sentinel webhook — signature-verified, sits before authUser routes
 app.use("/webhooks/sentinel", sentinelWebhookRoute);
 
-// api endpoints
 app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
 app.use("/api/cart", cartRouter);
 app.use("/api/order", orderRouter);
-app.use("/api", sentinelProxy);          // POST /api/sentinel-proxy
-app.use("/api/admin", adminSentinelProxy); // POST /api/admin/sentinel-proxy
-app.use("/api/user", otpRouter);         // POST /api/user/send-otp, /api/user/verify-otp
+app.use("/api", sentinelProxy);
+app.use("/api/admin", adminSentinelProxy);
+app.use("/api/user", otpRouter);
 
 app.get("/", (req, res) => {
   res.send("API Working");
 });
 
-// Turns a disallowed-origin CORS rejection (config/cors.js) into a clean
-// 403 instead of Express's default error handler, which would otherwise
-// leak a full filesystem stack trace to whatever origin made the request.
+// Global error handler — CORS rejections become clean 403s;
+// all other unhandled errors return a generic 500 (no stack trace to client).
 app.use((err, req, res, next) => {
   if (err && err.message?.startsWith("[CORS]")) {
     return res.status(403).json({ success: false, message: "Origin not allowed" });
   }
-  next(err);
+  console.error("[Server] Unhandled error:", err.message);
+  res.status(500).json({ success: false, message: "Internal server error" });
 });
 
-app.listen(port, () => console.log("Server started on PORT : " + port));
+// Start server only when running locally
+if (process.env.VERCEL !== "1") {
+  app.listen(port, () => {
+    console.log(`[Server] Started on PORT: ${port}`);
+  });
+}
+
+// Export app for Vercel
+export default app;
