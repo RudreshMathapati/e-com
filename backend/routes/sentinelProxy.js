@@ -1,19 +1,22 @@
 import express from "express";
 import authUser from "../middleware/auth.js";
-import { forwardToSentinel } from "../utils/sentinelForward.js";
+import { forwardToSentinel, resolveRealClientIp } from "../utils/sentinelForward.js";
 
 const router = express.Router();
 
 /**
  * POST /api/sentinel-proxy
  *
- * Three rules this proxy always enforces (per Sentinel integration guide):
+ * Four rules this proxy always enforces (per Sentinel integration guide):
  *  1. Sits behind authUser — anonymous requests are rejected outright, and
  *     an already-blacklisted session is rejected before it gets here.
  *  2. user_id and session_id are derived from the SERVER-verified JWT
  *     (authUser sets req.sentinelSessionId), never from req.body — the
  *     browser can lie about that.
- *  3. Fail open — forwardToSentinel() resolves to ALLOW on any upstream
+ *  3. Forwards the real shopper IP (resolveRealClientIp) — without this,
+ *     Sentinel would see every customer as this server's own IP. See
+ *     resolveRealClientIp()'s doc comment in sentinelForward.js.
+ *  4. Fail open — forwardToSentinel() resolves to ALLOW on any upstream
  *     error so a Sentinel outage cannot take the app down.
  */
 router.post("/sentinel-proxy", authUser, async (req, res) => {
@@ -32,7 +35,7 @@ router.post("/sentinel-proxy", authUser, async (req, res) => {
     session_id: sessionId,
   };
 
-  const result = await forwardToSentinel(forwarded);
+  const result = await forwardToSentinel(forwarded, resolveRealClientIp(req));
   return res.json(result);
 });
 

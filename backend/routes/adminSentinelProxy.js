@@ -1,16 +1,17 @@
 import express from "express";
 import adminAuth from "../middleware/adminAuth.js";
-import { forwardToSentinel } from "../utils/sentinelForward.js";
+import { forwardToSentinel, resolveRealClientIp } from "../utils/sentinelForward.js";
 
 const router = express.Router();
 
 /**
  * POST /api/admin/sentinel-proxy
  *
- * Same three rules as the user proxy (backend/routes/sentinelProxy.js):
- * sits behind adminAuth (rejects anonymous + blacklisted sessions), derives
- * identity from the server-verified admin JWT rather than req.body, and
- * fails open via forwardToSentinel().
+ * Same rules as the user proxy (backend/routes/sentinelProxy.js): sits
+ * behind adminAuth (rejects anonymous + blacklisted sessions), derives
+ * identity from the server-verified admin JWT rather than req.body,
+ * forwards the real admin IP (resolveRealClientIp) rather than this
+ * server's own, and fails open via forwardToSentinel().
  *
  * There is no per-admin user document in this app (admin identity is a
  * single email/password pair from env vars), so user_id is a stable
@@ -29,7 +30,7 @@ router.post("/sentinel-proxy", adminAuth, async (req, res) => {
     session_id: sessionId,
   };
 
-  const result = await forwardToSentinel(forwarded);
+  const result = await forwardToSentinel(forwarded, resolveRealClientIp(req));
   return res.json(result);
 });
 

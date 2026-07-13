@@ -21,6 +21,12 @@ const app = express();
 connectDB();
 connectCloudinary();
 
+// This backend runs behind Vercel's edge network — without this, req.ip
+// resolves to that infrastructure's own address rather than the real
+// caller's, which breaks resolveRealClientIp()'s final fallback
+// (../utils/sentinelForward.js).
+app.set("trust proxy", 1);
+
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors(corsOptions));

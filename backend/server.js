@@ -20,6 +20,12 @@ const port = process.env.PORT || 4000;
 connectDB();
 connectCloudinary();
 
+// This backend runs behind Vercel's edge network (and possibly another
+// load balancer in front of that) — without this, req.ip resolves to
+// that infrastructure's own address rather than the real caller's, which
+// breaks resolveRealClientIp()'s final fallback (utils/sentinelForward.js).
+app.set("trust proxy", 1);
+
 // middlewares
 app.use(express.json());
 app.use(cookieParser());

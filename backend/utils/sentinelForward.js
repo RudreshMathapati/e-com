@@ -20,6 +20,34 @@ export const FAIL_OPEN = {
 };
 
 /**
+ * Resolves the REAL shopper IP on this server, before forwarding to
+ * Sentinel. SEC-015: Sentinel's /evaluate never trusts an IP inside the
+ * JSON body (spoofable) and instead defaults to whoever is DIRECTLY
+ * connecting to it over TCP — since these proxy routes are the ones
+ * calling Sentinel (not the shopper's browser), that would be THIS
+ * SERVER's own IP for every single request, silently making every
+ * customer show up as the same one location. Forwarding this via
+ * X-Sentinel-Client-IP is how Sentinel learns the real one instead.
+ *
+ * Priority mirrors the SDK's own proxy reference implementations
+ * (sdk/examples/proxy/express/proxy.js): a trusted CDN header first
+ * (Cloudflare's cf-connecting-ip, or the generic x-real-ip), then the
+ * first hop of x-forwarded-for (what Vercel's edge network sets — this
+ * backend is deployed there per vercel.json), then Express's own req.ip
+ * as a last resort (only meaningful with `app.set('trust proxy', ...)`,
+ * which server.js/api/index.js both set).
+ */
+export function resolveRealClientIp(req) {
+  const cfIp = req.headers["cf-connecting-ip"];
+  if (cfIp) return cfIp;
+  const realIp = req.headers["x-real-ip"];
+  if (realIp) return realIp;
+  const forwardedFor = req.headers["x-forwarded-for"];
+  if (forwardedFor) return String(forwardedFor).split(",")[0].trim();
+  return req.ip || null;
+}
+
+/**
  * Forwards an already-identity-verified payload to the Sentinel /evaluate
  * endpoint. Never throws — every failure path resolves to FAIL_OPEN.
  *
@@ -29,8 +57,15 @@ export const FAIL_OPEN = {
  * preserved as `shadow_verdict` for observability. Flip to enforcement by
  * setting SENTINEL_SHADOW_MODE=false once baselines are trustworthy (see
  * Sentinel_Integration_Guide.md, "Go Live Safely").
+ *
+ * @param {object} payload
+ * @param {string|null} [clientIp] from resolveRealClientIp(req) — sent as
+ *   X-Sentinel-Client-IP so geo/VPN/Tor/impossible-travel scoring reflects
+ *   the actual shopper, not this server. Omitted entirely when null so
+ *   Sentinel falls back to its own TCP-observed address rather than an
+ *   empty header.
  */
-export async function forwardToSentinel(payload) {
+export async function forwardToSentinel(payload, clientIp = null) {
   if (!SENTINEL_URL || !SENTINEL_KEY) {
     console.warn("[Sentinel Proxy] SENTINEL_API_URL or SENTINEL_API_KEY not set — failing open");
     return FAIL_OPEN;
@@ -45,6 +80,7 @@ export async function forwardToSentinel(payload) {
       headers: {
         "Content-Type": "application/json",
         "X-Sentinel-Key": SENTINEL_KEY,
+        ...(clientIp ? { "X-Sentinel-Client-IP": clientIp } : {}),
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
