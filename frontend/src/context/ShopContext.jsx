@@ -3,6 +3,8 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
+import { sentinelIdentify } from "../sentinel.js";
+
 export const ShopContext = createContext();
 
 const ShopContextProvider = (props) => {
@@ -15,6 +17,17 @@ const ShopContextProvider = (props) => {
   const [products, setProducts] = useState([]);
   const [token, setToken] = useState("");
   const navigate = useNavigate();
+
+  // Global MFA states
+  const [showMfa, setShowMfa] = useState(false);
+  const [mfaToken, setMfaToken] = useState("");
+  const [onMfaSuccess, setOnMfaSuccess] = useState(null);
+
+  const triggerMfa = (mfaTokenValue, successCallback) => {
+    setMfaToken(mfaTokenValue);
+    setOnMfaSuccess(() => successCallback);
+    setShowMfa(true);
+  };
 
   const addToCart = async (itemId, size) => {
     if (!size) {
@@ -140,8 +153,11 @@ const ShopContextProvider = (props) => {
 
   useEffect(() => {
     if (!token && localStorage.getItem("token")) {
-      setToken(localStorage.getItem("token"));
-      getUserCart(localStorage.getItem("token"));
+      const storedToken = localStorage.getItem("token");
+      setToken(storedToken);
+      getUserCart(storedToken);
+      // Identify session with Sentinel using the token as both userId and sessionId hints
+      sentinelIdentify(storedToken, storedToken);
     }
   }, []);
 
@@ -163,6 +179,11 @@ const ShopContextProvider = (props) => {
     backendUrl,
     setToken,
     token,
+    showMfa,
+    setShowMfa,
+    mfaToken,
+    onMfaSuccess,
+    triggerMfa,
   };
 
   return (

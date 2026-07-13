@@ -7,6 +7,8 @@ import userRouter from "./routes/userRoute.js";
 import productRouter from "./routes/productRoute.js";
 import cartRouter from "./routes/cartRoute.js";
 import orderRouter from "./routes/orderRoute.js";
+import sentinelProxy from "./routes/sentinelProxy.js";
+import otpRouter from "./routes/otpRoute.js";
 
 // App Config
 const app = express();
@@ -23,6 +25,8 @@ app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
 app.use("/api/cart", cartRouter);
 app.use("/api/order", orderRouter);
+app.use("/api", sentinelProxy);          // POST /api/sentinel-proxy
+app.use("/api/user", otpRouter);         // POST /api/user/send-otp, /api/user/verify-otp
 
 app.get("/", (req, res) => {
   res.send("API Working");

@@ -5,6 +5,7 @@ import { assets } from "../assets/assets";
 import { ShopContext } from "../context/ShopContext";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { sentinelTrack } from "../sentinel.js";
 
 const PlaceOrder = () => {
   const [method, setMethod] = useState("cod");
@@ -17,6 +18,8 @@ const PlaceOrder = () => {
     getCartAmount,
     delivery_fee,
     products,
+    setToken,
+    triggerMfa,
   } = useContext(ShopContext);
 
   const [formData, setFormData] = useState({
@@ -38,8 +41,7 @@ const PlaceOrder = () => {
     setFormData((data) => ({ ...data, [name]: value }));
   };
 
-  const onSubmitHandler = async (event) => {
-    event.preventDefault();
+  const executeOrderPlacement = async () => {
     try {
       let orderItems = [];
 
@@ -172,6 +174,44 @@ const PlaceOrder = () => {
         default:
           break;
       }
+    } catch (error) {
+      console.log(error);
+      toast.error(error.message);
+    }
+  };
+
+  const onSubmitHandler = async (event) => {
+    event.preventDefault();
+    try {
+      // Sentinel: session verification before critical financial action
+      const verdict = await sentinelTrack("place_order", {
+        amount: getCartAmount() + delivery_fee,
+        method,
+      });
+
+      if (verdict.recommended_action === "BLOCK") {
+        toast.error("Order blocked due to suspicious activity. Please contact support.");
+        return;
+      }
+
+      if (verdict.recommended_action === "TERMINATE_SESSION") {
+        toast.error("Session terminated due to security risk. Please login again.");
+        setToken("");
+        localStorage.removeItem("token");
+        navigate("/login");
+        return;
+      }
+
+      if (verdict.recommended_action === "STEP_UP_AUTH") {
+        // Trigger global MFA flow and only execute order placement on successful verification
+        triggerMfa(token, () => {
+          executeOrderPlacement();
+        });
+        return;
+      }
+
+      // ALLOW
+      executeOrderPlacement();
     } catch (error) {
       console.log(error);
       toast.error(error.message);

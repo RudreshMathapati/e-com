@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import { Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import Collection from "./pages/Collection";
@@ -15,8 +15,12 @@ import SearchBar from "./components/SearchBar";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Verify from "./pages/Verify";
+import MfaModal from "./components/MfaModal";
+import { ShopContext } from "./context/ShopContext";
 
 const App = () => {
+  const { showMfa, setShowMfa, mfaToken, onMfaSuccess } = useContext(ShopContext);
+
   return (
     <div className="px-4 sm:px-[5vw] md:px-[7vw] lg:px-[9vw]">
       <ToastContainer />
@@ -35,6 +39,19 @@ const App = () => {
         <Route path="/verify" element={<Verify />} />
       </Routes>
       <Footer />
+      {showMfa && (
+        <MfaModal
+          isOpen={showMfa}
+          token={mfaToken}
+          onVerified={() => {
+            setShowMfa(false);
+            if (onMfaSuccess) onMfaSuccess();
+          }}
+          onClose={() => {
+            setShowMfa(false);
+          }}
+        />
+      )}
     </div>
   );
 };
