@@ -1,22 +1,12 @@
-import nodemailer from "nodemailer";
+import emailjs from "@emailjs/nodejs";
 import userModel from "../models/userModel.js";
 import otpModel from "../models/otpModel.js";
 
 /**
- * Nodemailer transporter — reads SMTP config from server-side env vars.
+ * EmailJS settings are read from server-side environment variables.
  * For Gmail: enable 2FA → Google Account → Security → App Passwords → generate one.
- * For other providers: update SMTP_HOST and SMTP_PORT accordingly.
+ * Configure the email layout and recipient in the EmailJS dashboard template.
  */
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false, // true for port 465, false for 587 (STARTTLS)
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
 /** Generates a cryptographically sufficient 6-digit numeric OTP */
 const generateOtp = () =>
   String(Math.floor(100000 + Math.random() * 900000));
@@ -46,56 +36,21 @@ const sendOtp = async (req, res) => {
     await otpModel.findOneAndDelete({ userId });
     await otpModel.create({ userId, code });
 
-    // Send the OTP via email
-    await transporter.sendMail({
-      from: `"Forever Shop Security" <${process.env.SMTP_FROM}>`,
-      to: user.email,
-      subject: "Your One-Time Verification Code",
-      html: `
-        <div style="
-          font-family: 'Segoe UI', Arial, sans-serif;
-          max-width: 480px;
-          margin: 0 auto;
-          background: #ffffff;
-          border: 1px solid #e5e5e5;
-          border-radius: 12px;
-          overflow: hidden;
-        ">
-          <div style="background: #111; padding: 24px 32px;">
-            <h1 style="color: #fff; font-size: 22px; margin: 0; font-weight: 600; letter-spacing: 1px;">
-              FOREVER SHOP
-            </h1>
-          </div>
-          <div style="padding: 32px;">
-            <h2 style="color: #111; font-size: 20px; margin: 0 0 8px;">Verify Your Identity</h2>
-            <p style="color: #555; font-size: 14px; line-height: 1.6; margin: 0 0 28px;">
-              Hi ${user.name},<br/>
-              We detected unusual activity on your account and need to verify it's really you.
-              Enter the code below to continue signing in:
-            </p>
-            <div style="
-              background: #f5f5f5;
-              border-radius: 8px;
-              padding: 20px;
-              text-align: center;
-              margin-bottom: 28px;
-            ">
-              <span style="
-                font-size: 40px;
-                font-weight: 700;
-                letter-spacing: 16px;
-                color: #111;
-                font-family: 'Courier New', monospace;
-              ">${code}</span>
-            </div>
-            <p style="color: #999; font-size: 12px; margin: 0;">
-              This code expires in <strong>10 minutes</strong>.
-              If you didn't attempt to sign in, please change your password immediately.
-            </p>
-          </div>
-        </div>
-      `,
-    });
+    // Send the OTP using the predefined EmailJS template.
+    await emailjs.send(
+      process.env.EMAILJS_SERVICE_ID,
+      process.env.EMAILJS_TEMPLATE_ID,
+      {
+        to_email: user.email,
+        user_name: user.name || "there",
+        otp_code: code,
+        expires_in_minutes: 10,
+      },
+      {
+        publicKey: process.env.EMAILJS_PUBLIC_KEY,
+        privateKey: process.env.EMAILJS_PRIVATE_KEY,
+      },
+    );
 
     res.json({ success: true, message: "Verification code sent to your registered email" });
   } catch (error) {
