@@ -2,6 +2,7 @@ import axios from "axios";
 import React, { useEffect, useState } from "react";
 import { backendUrl, currency } from "../App";
 import { toast } from "react-toastify";
+import { sentinelTrack } from "../sentinel.js";
 
 const List = ({ token }) => {
   const [list, setList] = useState([]);
@@ -23,6 +24,24 @@ const List = ({ token }) => {
 
   const removeProduct = async (id) => {
     try {
+      // Destructive action — tracked explicitly (with the target product id)
+      // rather than relying only on the generic axios interceptor.
+      const verdict = await sentinelTrack("remove_product", { productId: id });
+
+      if (verdict.recommended_action === "BLOCK") {
+        toast.error("Product removal blocked due to suspicious activity.");
+        return;
+      }
+      if (verdict.recommended_action === "TERMINATE_SESSION") {
+        toast.error("Session terminated due to security risk. Please login again.");
+        localStorage.removeItem("token");
+        window.location.href = "/";
+        return;
+      }
+      if (verdict.recommended_action === "STEP_UP_AUTH") {
+        toast.warn("Unusual activity detected — proceeding, but please verify this was you.");
+      }
+
       const response = await axios.post(
         backendUrl + "/api/product/remove",
         { id },

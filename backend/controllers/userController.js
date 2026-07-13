@@ -7,6 +7,23 @@ const createToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET);
 };
 
+/**
+ * Sets an httpOnly cookie carrying the same JWT already returned in the
+ * response body. This is ONLY consumed by the Sentinel proxy routes — the
+ * real @sentinel-dev/sdk browser transport authenticates via
+ * `credentials: 'include'` (cookies) and cannot attach the custom `token`
+ * header every other route here uses. All other routes are unaffected;
+ * they keep reading the header exactly as before.
+ */
+const setSentinelCookie = (res, name, token) => {
+  res.cookie(name, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+};
+
 // Route for user login
 const loginUser = async (req, res) => {
   try {
@@ -25,6 +42,7 @@ const loginUser = async (req, res) => {
 
     if (isMatch) {
       const token = createToken(user._id);
+      setSentinelCookie(res, "sentinel_user_token", token);
       res.json({
         success: true,
         token,
@@ -82,6 +100,7 @@ const registerUser = async (req, res) => {
     const user = await newUser.save();
 
     const token = createToken(user._id);
+    setSentinelCookie(res, "sentinel_user_token", token);
 
     res.json({ success: true, token });
   } catch (error) {
@@ -100,6 +119,7 @@ const adminLogin = async (req, res) => {
       password === process.env.ADMIN_PASSWORD
     ) {
       const token = jwt.sign(email + password, process.env.JWT_SECRET);
+      setSentinelCookie(res, "sentinel_admin_token", token);
       res.json({ success: true, token });
     } else {
       res.json({ success: false, message: "Invalid credentials" });

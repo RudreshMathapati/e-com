@@ -3,6 +3,7 @@ import axios from "axios";
 import { backendUrl, currency } from "../App";
 import { toast } from "react-toastify";
 import { assets } from "../assets/assets";
+import { sentinelTrack } from "../sentinel.js";
 
 const Orders = ({ token }) => {
   const [orders, setOrders] = useState([]);
@@ -31,6 +32,28 @@ const Orders = ({ token }) => {
 
   const statusHandler = async (event, orderId) => {
     try {
+      // Business-critical action — tracked explicitly with the target
+      // order id and new status rather than relying only on the generic
+      // axios interceptor.
+      const verdict = await sentinelTrack("update_order_status", {
+        orderId,
+        status: event.target.value,
+      });
+
+      if (verdict.recommended_action === "BLOCK") {
+        toast.error("Status update blocked due to suspicious activity.");
+        return;
+      }
+      if (verdict.recommended_action === "TERMINATE_SESSION") {
+        toast.error("Session terminated due to security risk. Please login again.");
+        localStorage.removeItem("token");
+        window.location.href = "/";
+        return;
+      }
+      if (verdict.recommended_action === "STEP_UP_AUTH") {
+        toast.warn("Unusual activity detected — proceeding, but please verify this was you.");
+      }
+
       const response = await axios.post(
         backendUrl + "/api/order/status",
         { orderId, status: event.target.value },
@@ -41,7 +64,7 @@ const Orders = ({ token }) => {
       }
     } catch (error) {
       console.log(error);
-      toast.error(response.data.message);
+      toast.error(error.message);
     }
   };
 

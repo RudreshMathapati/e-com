@@ -2,6 +2,7 @@ import axios from "axios";
 import React, { useState } from "react";
 import { backendUrl } from "../App";
 import { toast } from "react-toastify";
+import { sentinelIdentify, sentinelTrack } from "../sentinel.js";
 
 const Login = ({ setToken }) => {
   const [email, setEmail] = useState("");
@@ -15,7 +16,28 @@ const Login = ({ setToken }) => {
         password,
       });
       if (response.data.success) {
-        setToken(response.data.token);
+        const adminToken = response.data.token;
+
+        // Identify with Sentinel, then track the login itself before
+        // granting access to the admin panel — this is the single
+        // highest-privilege action in the whole app.
+        sentinelIdentify(adminToken, adminToken);
+        const verdict = await sentinelTrack("admin_login", { email });
+
+        if (
+          verdict.recommended_action === "BLOCK" ||
+          verdict.recommended_action === "TERMINATE_SESSION" ||
+          verdict.recommended_action === "STEP_UP_AUTH"
+        ) {
+          // No admin MFA flow exists yet — treat any elevated verdict as a
+          // hard stop rather than granting access to a privileged panel.
+          toast.error(
+            "Admin login blocked due to suspicious activity. Contact security if this was you."
+          );
+          return;
+        }
+
+        setToken(adminToken);
       } else {
         toast.error(response.data.message);
       }
@@ -41,6 +63,7 @@ const Login = ({ setToken }) => {
               type="email"
               placeholder="your@email.com"
               required
+              data-sentinel-field="email"
             />
           </div>
           <div className="mb-3 min-w-72">
@@ -52,6 +75,7 @@ const Login = ({ setToken }) => {
               type="password"
               placeholder="Enter your password"
               required
+              data-sentinel-field="password"
             />
           </div>
           <button

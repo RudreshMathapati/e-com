@@ -7,8 +7,16 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { initSentinel, sentinelTrack } from "./sentinel.js";
 
-// Initialize the Sentinel SDK/shim early at app boot
-initSentinel({ endpoint: "/api/sentinel-proxy" });
+// Initialize the Sentinel SDK early at app boot. The endpoint MUST be
+// absolute (not a relative "/api/sentinel-proxy") — frontend and backend
+// are separate Vercel deployments with no API rewrite between them, so a
+// relative path would resolve against this app's own domain in production
+// and silently 404 (the SDK would fail open, but Sentinel would never see
+// any traffic). `credentials: 'include'` on the SDK's fetch is why the
+// backend cookie is issued with SameSite=None; Secure in production —
+// see backend/controllers/userController.js.
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
+initSentinel({ endpoint: `${backendUrl}/api/sentinel-proxy` });
 
 // Global Axios Interceptor to track every state-changing action (POST/PUT/DELETE)
 axios.interceptors.request.use(async (config) => {
