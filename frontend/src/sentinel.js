@@ -14,6 +14,7 @@
  * backend/controllers/userController.js and backend/middleware/auth.js).
  */
 import Sentinel from "@sentinel-dev/sdk";
+import { logSentinelTrack, logSentinelVerdict } from "./logger.js";
 
 let _initialized = false;
 
@@ -78,7 +79,15 @@ export async function sentinelTrack(actionType, metadata = {}) {
     );
     return { ...FAIL_OPEN };
   }
-  return Sentinel.track(actionType, metadata);
+  logSentinelTrack(actionType, metadata);
+  try {
+    const verdict = await Sentinel.track(actionType, metadata);
+    logSentinelVerdict(actionType, verdict);
+    return verdict;
+  } catch (err) {
+    logSentinelVerdict(actionType, { recommended_action: "ALLOW", risk: { score: 0, level: "LOW" }, degraded: true });
+    return { ...FAIL_OPEN };
+  }
 }
 
 /**
