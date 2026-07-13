@@ -42,8 +42,11 @@ export const FAIL_OPEN = {
  */
 export async function forwardToSentinel(payload) {
   if (!SENTINEL_URL || !SENTINEL_KEY) {
-    console.warn("[Sentinel Proxy] SENTINEL_API_URL or SENTINEL_API_KEY not set — failing open");
-    return FAIL_OPEN;
+    const reason = !SENTINEL_URL && !SENTINEL_KEY
+      ? "SENTINEL_API_URL and SENTINEL_API_KEY not set"
+      : !SENTINEL_URL ? "SENTINEL_API_URL not set" : "SENTINEL_API_KEY not set";
+    console.warn(`[Sentinel Proxy] ${reason} — failing open`);
+    return { ...FAIL_OPEN, fail_reason: reason };
   }
 
   if (process.env.NODE_ENV !== "production") {
@@ -70,12 +73,13 @@ export async function forwardToSentinel(payload) {
 
     if (!upstream.ok) {
       const errBody = await upstream.text().catch(() => "");
+      const reason = `upstream ${upstream.status} from ${SENTINEL_URL}`;
       console.warn(`[Sentinel Proxy] upstream returned ${upstream.status} — failing open`, {
         url: SENTINEL_URL,
         status: upstream.status,
         body: errBody.slice(0, 300),
       });
-      return FAIL_OPEN;
+      return { ...FAIL_OPEN, fail_reason: reason, upstream_status: upstream.status, upstream_body: errBody.slice(0, 200) };
     }
 
     const body = await upstream.json().catch(() => null);
@@ -98,10 +102,11 @@ export async function forwardToSentinel(payload) {
   } catch (err) {
     if (err.name === "AbortError") {
       console.warn("[Sentinel Proxy] request timed out (3s) — failing open");
+      return { ...FAIL_OPEN, fail_reason: `timeout after 3s calling ${SENTINEL_URL}` };
     } else {
       console.error("[Sentinel Proxy] error:", err.message);
+      return { ...FAIL_OPEN, fail_reason: err.message };
     }
-    return FAIL_OPEN;
   } finally {
     clearTimeout(timer);
   }

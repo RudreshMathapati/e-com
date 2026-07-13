@@ -90,7 +90,11 @@ export function logSentinelVerdict(action, verdict) {
   );
   console.log("verdict :", badge);
   console.log("risk    :", level, "| score:", score);
-  if (degraded) console.warn("⚠️ Sentinel unreachable — failed open (no log recorded in dashboard)");
+  if (degraded) {
+    console.warn("⚠️ Sentinel unreachable — failed open (no log recorded in dashboard)");
+    if (verdict?.fail_reason)    console.warn("reason  :", verdict.fail_reason);
+    if (verdict?.upstream_status) console.warn("upstream:", verdict.upstream_status, verdict?.upstream_body ?? "");
+  }
   if (verdict?.shadow_verdict) console.log("shadow  :", verdict.shadow_verdict, "(enforced as ALLOW)");
   console.log("raw     :", verdict);
   console.groupEnd();
