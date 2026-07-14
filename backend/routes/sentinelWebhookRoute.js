@@ -1,6 +1,6 @@
 import express from "express";
 import crypto from "crypto";
-import { blacklist } from "../utils/sentinelBlacklist.js";
+import { blacklistSession, blacklistUser } from "../utils/sentinelBlacklist.js";
 
 const router = express.Router();
 
@@ -9,10 +9,25 @@ const router = express.Router();
  *
  * Async, out-of-band threat alerts from the Sentinel dashboard — this is
  * what gives us defense in depth beyond the synchronous /evaluate call in
- * the proxy routes. If Sentinel decides mid-session (from signals the
- * synchronous call never saw) that a session must die, it POSTs here and we
- * blacklist it so the *next* request from that session is rejected server
- * side, even if the attacker never touches the frontend's own interceptor.
+ * the proxy routes. Two event types now fire here:
+ *
+ *  - "alert.created": automatic detection (Sentinel's own scoring flagged
+ *    this session). Carries the real session_id — the exact same value we
+ *    sent on /evaluate — so we blacklist that one session.
+ *
+ *  - "session.terminated_by_operator": someone on the security team clicked
+ *    "Kill" on a session in the Sentinel dashboard (Live Sessions or an
+ *    alert's detail page). Sentinel cannot end the real session itself —
+ *    this is how it tells us so we can react without waiting for that
+ *    session's next /evaluate call. Critically, this event does NOT carry
+ *    session_id: Sentinel only ever stores a one-way hash of the token it
+ *    was given, so the original value isn't recoverable here. We blacklist
+ *    by user_id instead — every active session for that user/admin is
+ *    treated as terminated, not just the one that was killed.
+ *
+ * Either way, if delivery fails, the app still finds out on that session's
+ * next /evaluate call — a session Sentinel has already marked terminated
+ * short-circuits to a CRITICAL/TERMINATE_SESSION response regardless.
  *
  * Sentinel signs `JSON.stringify(req.body)` with HMAC-SHA256 using
  * SENTINEL_WEBHOOK_SECRET (configured to match in the Sentinel dashboard's
@@ -44,11 +59,15 @@ router.post("/", async (req, res) => {
       return res.status(403).send("Signature verification failed");
     }
 
-    const { session_id, risk_level, recommended_action } = req.body || {};
+    const { event, session_id, risk_level, recommended_action, user_id } = req.body || {};
 
-    if (recommended_action === "TERMINATE_SESSION" || risk_level === "CRITICAL") {
+    if (event === "alert.created" && (recommended_action === "TERMINATE_SESSION" || risk_level === "CRITICAL")) {
       if (session_id) {
-        await blacklist(session_id, recommended_action || risk_level);
+        await blacklistSession(session_id, recommended_action || risk_level);
+      }
+    } else if (event === "session.terminated_by_operator") {
+      if (user_id) {
+        await blacklistUser(user_id, event);
       }
     }
 

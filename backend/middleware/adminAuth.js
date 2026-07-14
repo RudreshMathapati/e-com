@@ -13,10 +13,6 @@ const adminAuth = async (req, res, next) => {
       });
     }
 
-    if (await isBlacklisted(token)) {
-      return res.status(403).json({ success: false, sentinelVerdict: "TERMINATE_SESSION" });
-    }
-
     const token_decode = jwt.verify(token, process.env.JWT_SECRET);
     // Admin token payload is { role: 'admin', email } — reject anything else.
     if (token_decode.role !== "admin" || token_decode.email !== process.env.ADMIN_EMAIL) {
@@ -25,6 +21,15 @@ const adminAuth = async (req, res, next) => {
         message: "Not Authorized Login Again",
       });
     }
+
+    // Verified before the blacklist check so one query covers both an
+    // exact-session block and an admin-wide block (operator killed this
+    // admin session from the dashboard — see sentinelWebhookRoute.js).
+    const adminIdentity = `admin:${process.env.ADMIN_EMAIL || "unknown"}`;
+    if (await isBlacklisted({ sessionId: token, userId: adminIdentity })) {
+      return res.status(403).json({ success: false, sentinelVerdict: "TERMINATE_SESSION" });
+    }
+
     req.sentinelSessionId = token;
     next();
   } catch (error) {

@@ -46,13 +46,18 @@ router.post("/sentinel-proxy", async (req, res) => {
   let sessionId = null;
 
   // ── Layer 1: standard header / cookie token ───────────────────────────
+  // JWT is verified BEFORE the blacklist check (not after) so a single
+  // isBlacklisted() call can cover both an exact-session block (automatic
+  // detection) and a user-wide block (operator killed this user's session
+  // from the dashboard, which doesn't identify a session — see
+  // sentinelWebhookRoute.js) in one query.
   const headerToken = req.headers.token || req.cookies?.sentinel_user_token;
   if (headerToken) {
     try {
-      if (await isBlacklisted(headerToken)) {
+      const decoded = jwt.verify(headerToken, process.env.JWT_SECRET);
+      if (await isBlacklisted({ sessionId: headerToken, userId: String(decoded.id) })) {
         return res.status(403).json({ success: false, sentinelVerdict: "TERMINATE_SESSION" });
       }
-      const decoded = jwt.verify(headerToken, process.env.JWT_SECRET);
       userId = decoded.id;
       sessionId = headerToken;
     } catch {
@@ -67,7 +72,7 @@ router.post("/sentinel-proxy", async (req, res) => {
     try {
       const decoded = jwt.verify(req.body.session_id, process.env.JWT_SECRET);
       if (decoded?.id) {
-        if (await isBlacklisted(req.body.session_id)) {
+        if (await isBlacklisted({ sessionId: req.body.session_id, userId: String(decoded.id) })) {
           return res.status(403).json({ success: false, sentinelVerdict: "TERMINATE_SESSION" });
         }
         userId = decoded.id;
