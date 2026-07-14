@@ -44,6 +44,9 @@ export function initSentinel(options = {}) {
   _initialized = true;
   Sentinel.init({
     endpoint: options.endpoint || "/api/sentinel-proxy",
+    // The SDK default is 3 s — too short for a Render cold-start (~5 s).
+    // 10 s matches the backend's own 8 s upstream timeout with some headroom.
+    timeout: options.timeout ?? 10_000,
   });
 }
 

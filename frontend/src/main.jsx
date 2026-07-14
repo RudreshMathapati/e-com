@@ -37,7 +37,9 @@ axios.defaults.withCredentials = true;
 // share the same domain/origin in production).
 const sentinelEndpoint =
   import.meta.env.VITE_SENTINEL_PROXY_URL || "/api/sentinel-proxy";
+console.log("[Sentinel] proxy endpoint:", sentinelEndpoint);
 initSentinel({ endpoint: sentinelEndpoint });
+
 
 // Global Axios Interceptor to track every state-changing action (POST/PUT/DELETE)
 axios.interceptors.request.use(async (config) => {
