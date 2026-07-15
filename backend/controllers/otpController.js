@@ -3,12 +3,13 @@ import userModel from "../models/userModel.js";
 import otpModel from "../models/otpModel.js";
 import crypto from "crypto";
 
-/**
- * EmailJS settings are read from server-side environment variables.
- * For Gmail: enable 2FA → Google Account → Security → App Passwords → generate one.
- * Configure the email layout and recipient in the EmailJS dashboard template.
- */
-/** Generates a cryptographically secure 6-digit numeric OTP */
+// ── Startup check: log which EmailJS env vars are present (values redacted) ──
+const EJS_VARS = ["EMAILJS_SERVICE_ID","EMAILJS_TEMPLATE_ID","EMAILJS_PUBLIC_KEY","EMAILJS_PRIVATE_KEY"];
+EJS_VARS.forEach(k => {
+  console.log(`[OTP] ${k}: ${process.env[k] ? "✓ set" : "✗ MISSING"}`);
+});
+
+
 const generateOtp = () =>
   String(crypto.randomInt(100000, 1000000));
 
@@ -55,10 +56,18 @@ const sendOtp = async (req, res) => {
 
     res.json({ success: true, message: "Verification code sent to your registered email" });
   } catch (error) {
-    console.error("[OTP] sendOtp error:", error.message);
+    // Log the full error so Render logs show the real EmailJS reason
+    console.error("[OTP] sendOtp error — full details:", {
+      message: error?.message,
+      status: error?.status,
+      text: error?.text,
+      stack: error?.stack,
+    });
     res.status(500).json({
       success: false,
       message: "Failed to send verification code. Please try again.",
+      // expose detail in non-production so you can see it in the Render dashboard
+      ...(process.env.NODE_ENV !== "production" && { detail: error?.text || error?.message }),
     });
   }
 };
